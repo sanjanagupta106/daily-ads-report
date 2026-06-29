@@ -68,10 +68,6 @@
         <button class="copy-btn" onclick="copyVal('total-count', this)">Copy</button>
       </span>
     </div>
-    <div class="result-row">
-      <span class="result-label">Cancelled orders (excluded)</span>
-      <span class="result-value" id="cancelled-count" style="font-size:15px;color:#888">—</span>
-    </div>
     <div class="file-info" id="file-info"></div>
     <button class="reset-btn" onclick="reset()">Upload a different file</button>
   </div>
@@ -113,9 +109,8 @@ function parseOrders(text, filename) {
   if (lines.length < 2) { showWarning('The file appears to be empty.'); return; }
 
   const headers = parseCSVLine(lines[0]);
-  const totalCol     = headers.findIndex(h => h.trim() === 'Total');
-  const cancelledCol = headers.findIndex(h => h.trim() === 'Cancelled at');
-  const nameCol      = headers.findIndex(h => h.trim() === 'Name');
+  const totalCol = headers.findIndex(h => h.trim() === 'Total');
+  const nameCol  = headers.findIndex(h => h.trim() === 'Name');
 
   if (totalCol === -1) {
     showWarning('Could not find a "Total" column in this file. Please check you are uploading the correct Shopify orders export.');
@@ -124,7 +119,6 @@ function parseOrders(text, filename) {
 
   let grossTotal = 0;
   let orderCount = 0;
-  let cancelledCount = 0;
   const seenOrders = new Set();
 
   for (let i = 1; i < lines.length; i++) {
@@ -138,9 +132,6 @@ function parseOrders(text, filename) {
     if (seenOrders.has(name)) continue;
     seenOrders.add(name);
 
-    const cancelledAt = (cols[cancelledCol] || '').trim();
-    if (cancelledAt) { cancelledCount++; continue; }
-
     const val = parseFloat((cols[totalCol] || '').replace(/[^0-9.]/g, ''));
     if (!isNaN(val)) { grossTotal += val; orderCount++; }
   }
@@ -152,7 +143,6 @@ function parseOrders(text, filename) {
 
   document.getElementById('total-value').textContent = 'Rs. ' + grossTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   document.getElementById('total-count').textContent = orderCount;
-  document.getElementById('cancelled-count').textContent = cancelledCount;
   document.getElementById('file-info').textContent = filename + ' · ' + (lines.length - 1) + ' rows processed';
 
   const area = document.getElementById('upload-area');
