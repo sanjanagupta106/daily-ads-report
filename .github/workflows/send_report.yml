@@ -1,0 +1,33 @@
+name: Daily Ads Report
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - run: python daily_report.py
+        env:
+          FB_ACCESS_TOKEN:   ${{ secrets.FB_ACCESS_TOKEN }}
+          FB_NEW_ACCOUNT_ID: ${{ secrets.FB_NEW_ACCOUNT_ID }}
+          FB_OLD_ACCOUNT_ID: ${{ secrets.FB_OLD_ACCOUNT_ID }}
+          FB_NEW_UTM:        ${{ secrets.FB_NEW_UTM }}
+          FB_OLD_UTM:        ${{ secrets.FB_OLD_UTM }}
+          SHOPIFY_STORE:     ${{ secrets.SHOPIFY_STORE }}
+          SHOPIFY_TOKEN:     ${{ secrets.SHOPIFY_TOKEN }}
+          GOOGLE_CUSTOMER_ID:   ${{ secrets.GOOGLE_CUSTOMER_ID }}
+          GOOGLE_DEV_TOKEN:     ${{ secrets.GOOGLE_DEV_TOKEN }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SENDER_EMAIL:     ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD:  ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL:  ${{ secrets.RECIPIENT_EMAIL }}
