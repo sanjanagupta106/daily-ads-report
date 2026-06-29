@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopify Orders Total</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; color: #1a1a1a; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { background: #fff; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; border: 1px solid #e8e8e4; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 28px; }
+  .upload-area { border: 2px dashed #d0d0ca; border-radius: 12px; padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: #fafaf8; margin-bottom: 20px; }
+  .upload-area:hover { border-color: #4a90d9; background: #f0f6ff; }
+  .upload-area.drag { border-color: #4a90d9; background: #e8f2ff; }
+  .upload-area.done { border-color: #22a06b; background: #f0faf5; border-style: solid; cursor: default; }
+  .upload-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .upload-hint { font-size: 13px; color: #888; }
+  #csv-input { display: none; }
+  .results { display: none; }
+  .results.show { display: block; }
+  .result-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #f0f0ec; }
+  .result-row:last-child { border-bottom: none; }
+  .result-label { font-size: 14px; color: #555; }
+  .result-value { font-size: 18px; font-weight: 600; color: #1a1a1a; }
+  .result-value.highlight { color: #166534; font-size: 22px; }
+  .copy-btn { font-size: 12px; background: #f0f0ec; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; color: #555; margin-left: 10px; transition: background 0.15s; }
+  .copy-btn:hover { background: #e0e0da; }
+  .copy-btn.copied { background: #dcfce7; color: #166534; }
+  .file-info { font-size: 12px; color: #888; margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0f0ec; }
+  .reset-btn { margin-top: 20px; width: 100%; padding: 10px; background: transparent; border: 1px solid #e0e0da; border-radius: 8px; font-size: 13px; color: #888; cursor: pointer; transition: all 0.15s; }
+  .reset-btn:hover { border-color: #aaa; color: #444; }
+  .warning { background: #fef9c3; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #854d0e; margin-top: 12px; display: none; }
+  .warning.show { display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Shopify Orders Total</h1>
+  <p class="subtitle">Drop your daily orders CSV — get the gross total instantly</p>
+
+  <div class="upload-area" id="upload-area"
+    onclick="document.getElementById('csv-input').click()"
+    ondragover="dragOver(event)"
+    ondragleave="dragLeave(event)"
+    ondrop="dropFile(event)">
+    <div class="upload-icon">📂</div>
+    <div class="upload-title">Drop orders_export.csv here</div>
+    <div class="upload-hint">or click to browse</div>
+  </div>
+  <input type="file" id="csv-input" accept=".csv" onchange="handleFile(this)">
+
+  <div class="warning" id="warning"></div>
+
+  <div class="results" id="results">
+    <div class="result-row">
+      <span class="result-label">Gross orders value</span>
+      <span>
+        <span class="result-value highlight" id="total-value">—</span>
+        <button class="copy-btn" onclick="copyVal('total-value', this)">Copy</button>
+      </span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Total order count</span>
+      <span>
+        <span class="result-value" id="total-count">—</span>
+        <button class="copy-btn" onclick="copyVal('total-count', this)">Copy</button>
+      </span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Cancelled orders (excluded)</span>
+      <span class="result-value" id="cancelled-count" style="font-size:15px;color:#888">—</span>
+    </div>
+    <div class="file-info" id="file-info"></div>
+    <button class="reset-btn" onclick="reset()">Upload a different file</button>
+  </div>
+</div>
+
+<script>
+function dragOver(e) {
+  e.preventDefault();
+  if (!document.getElementById('results').classList.contains('show'))
+    document.getElementById('upload-area').classList.add('drag');
+}
+function dragLeave(e) {
+  document.getElementById('upload-area').classList.remove('drag');
+}
+function dropFile(e) {
+  e.preventDefault();
+  document.getElementById('upload-area').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFile(input) {
+  if (input.files[0]) processFile(input.files[0]);
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      parseOrders(e.target.result, file.name);
+    } catch(err) {
+      showWarning('Could not read this file. Please make sure it is the Shopify orders CSV.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseOrders(text, filename) {
+  const lines = text.split('\n');
+  if (lines.length < 2) { showWarning('The file appears to be empty.'); return; }
+
+  const headers = parseCSVLine(lines[0]);
+  const totalCol     = headers.findIndex(h => h.trim() === 'Total');
+  const cancelledCol = headers.findIndex(h => h.trim() === 'Cancelled at');
+  const nameCol      = headers.findIndex(h => h.trim() === 'Name');
+
+  if (totalCol === -1) {
+    showWarning('Could not find a "Total" column in this file. Please check you are uploading the correct Shopify orders export.');
+    return;
+  }
+
+  let grossTotal = 0;
+  let orderCount = 0;
+  let cancelledCount = 0;
+  const seenOrders = new Set();
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const cols = parseCSVLine(lines[i]);
+    const name = (cols[nameCol] || '').trim();
+
+    if (!name.startsWith('#')) continue;
+    if (seenOrders.has(name)) continue;
+    seenOrders.add(name);
+
+    const cancelledAt = (cols[cancelledCol] || '').trim();
+    if (cancelledAt) { cancelledCount++; continue; }
+
+    const val = parseFloat((cols[totalCol] || '').replace(/[^0-9.]/g, ''));
+    if (!isNaN(val)) { grossTotal += val; orderCount++; }
+  }
+
+  if (orderCount === 0) {
+    showWarning('No valid orders found in this file.');
+    return;
+  }
+
+  document.getElementById('total-value').textContent = 'Rs. ' + grossTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  document.getElementById('total-count').textContent = orderCount;
+  document.getElementById('cancelled-count').textContent = cancelledCount;
+  document.getElementById('file-info').textContent = filename + ' · ' + (lines.length - 1) + ' rows processed';
+
+  const area = document.getElementById('upload-area');
+  area.classList.add('done');
+  area.innerHTML = '<div class="upload-icon">✅</div><div class="upload-title">' + filename + '</div><div class="upload-hint">Processed successfully</div>';
+
+  document.getElementById('results').classList.add('show');
+  document.getElementById('warning').classList.remove('show');
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
+    else { current += ch; }
+  }
+  result.push(current);
+  return result;
+}
+
+function copyVal(id, btn) {
+  const text = document.getElementById(id).textContent.replace('Rs. ', '').replace(/,/g, '');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function showWarning(msg) {
+  const w = document.getElementById('warning');
+  w.textContent = msg;
+  w.classList.add('show');
+}
+
+function reset() {
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('warning').classList.remove('show');
+  document.getElementById('csv-input').value = '';
+  const area = document.getElementById('upload-area');
+  area.classList.remove('done');
+  area.innerHTML = '<div class="upload-icon">📂</div><div class="upload-title">Drop orders_export.csv here</div><div class="upload-hint">or click to browse</div>';
+}
+</script>
+</body>
+</html>
